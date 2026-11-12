@@ -1,0 +1,14 @@
+{
+  "name": "Eat 5 Star",
+  "short_name": "Eat 5 Star",
+  "description": "Do nothing. Last as long as you can.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2a140c",
+  "theme_color": "#2a140c",
+  "icons": [
+    {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

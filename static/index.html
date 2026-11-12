@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<meta name="theme-color" content="#2a140c">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<title>Eat 5 Star — Do nothing</title>
+<style>
+:root{--cocoa:#2a140c;--gold:#f6bd2e;--red:#d83a2c;--cream:#fff0d0}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 30%,#421f11 0,#2a140c 55%,#140805 100%);color:var(--cream);font-family:"Trebuchet MS",system-ui,sans-serif;display:flex;align-items:center;justify-content:center;transition:background .3s}
+body.over{background:#64180f}
+.panel{width:min(92vw,440px);padding:28px 20px;border-radius:34px;background:#351a0e;border:2px solid #79451e;box-shadow:0 8px 0 #170905;text-align:center}
+.bar{margin:0 auto 14px;width:min(70%,300px);aspect-ratio:3.3/1;border-radius:22px;background:linear-gradient(#ffd34e,#f3ad22 70%,#9c5a13);box-shadow:0 6px 0 #170905;display:flex;align-items:center;justify-content:center}
+.bar span{background:var(--red);color:var(--cream);width:100%;padding:6px 0;font-weight:bold;letter-spacing:.08em;font-size:clamp(15px,5vw,26px)}
+h1{color:var(--gold);font-size:clamp(32px,9vw,48px);margin:8px 0}
+.sub{font-size:22px;margin:4px 0 14px}
+.txt{color:#e5cfad;line-height:1.5;margin:0 0 18px;font-size:15px}
+button{font:bold 19px "Trebuchet MS",system-ui,sans-serif;background:var(--gold);color:var(--cocoa);border:0;border-radius:34px;padding:12px 40px;cursor:pointer;box-shadow:0 5px 0 #8f261b}
+button:active{transform:translateY(3px);box-shadow:0 2px 0 #8f261b}
+.install{margin-top:14px}
+.install button{font-size:14px;padding:8px 24px;background:transparent;color:var(--gold);border:2px solid var(--gold);box-shadow:none}
+.install button[disabled]{opacity:.7;cursor:default}
+.install small{display:block;color:#c0a47b;margin-top:6px;font-size:12px}
+.best{color:#c0a47b;font-size:12px;font-weight:bold;letter-spacing:.05em;margin-top:16px}
+.clock{font-size:clamp(64px,22vw,120px);font-weight:bold;color:var(--gold);margin:10px 0;font-variant-numeric:tabular-nums}
+.stars{font-size:32px;letter-spacing:6px;color:#604b39}
+.stars b{color:var(--gold);font-weight:normal}
+.marks{color:#c0a47b;font-size:11px;word-spacing:14px;margin:6px 0 10px}
+.tag{color:var(--gold);font-weight:bold;font-size:12px;letter-spacing:.08em}
+.hint{font-size:17px;font-weight:bold;margin-top:14px}
+.big{font-size:16px;font-weight:bold;margin:12px 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="bar"><span>5 STAR</span></div>
+
+  <section id="idle">
+    <h1>Eat 5 Star</h1>
+    <p class="sub">Do nothing.</p>
+    <p class="txt">Press Eat, then let go of everything.<br>No time limit — play as long as you can.<br>Your rank keeps rising every 5 minutes.</p>
+    <button id="eat">Eat</button>
+    <div class="install" id="installBox">
+      <button id="install">Install app</button>
+      <small id="installNote" hidden></small>
+    </div>
+  </section>
+
+  <section id="play" hidden>
+    <div class="hint" id="hint">Hands off in...</div>
+    <div class="clock" id="clock">3</div>
+    <div class="stars" id="stars">★★★★★</div>
+    <div class="marks">10s 30s 1m 2m 5m</div>
+    <div class="tag" id="tag">∞ NOVICE</div>
+  </section>
+
+  <section id="over" hidden>
+    <h1>You moved!</h1>
+    <p class="sub" id="rank"></p>
+    <p class="txt" id="reason"></p>
+    <p class="big" id="lasted"></p>
+    <button id="again">Eat again</button>
+  </section>
+
+  <div class="best" id="best"></div>
+</div>
+
+<script>
+const MILESTONES=[10,30,60,120,300];
+const RANKS=["Novice","Apprentice","Focused","Pro","Motivated","Motivated Legend"];
+const ENDLESS=["Champion","Cosmic","Eternal","Infinite","Mythic"];
+const $=id=>document.getElementById(id);
+
+function rankFor(e){
+  const stars=MILESTONES.filter(m=>e>=m).length;
+  if(e<MILESTONES[4]) return RANKS[stars];
+  const prestige=Math.floor(e/MILESTONES[4])-1;
+  if(prestige===0) return RANKS[5];
+  if(prestige<=ENDLESS.length) return ENDLESS[prestige-1]+" Legend";
+  const g=prestige-ENDLESS.length-1;
+  return ENDLESS[g%ENDLESS.length]+" Legend · Ascension "+(Math.floor(g/ENDLESS.length)+2);
+}
+
+let best=0;
+try{best=parseFloat(localStorage.getItem("eat5star_best"))||0}catch(e){}
+const showBest=()=>$("best").textContent="PERSONAL BEST   "+best.toFixed(2)+" s";
+showBest();
+
+let state="idle",countEnd=0,startedAt=0,lastXY=null,raf=0;
+const show=name=>{["idle","play","over"].forEach(s=>$(s).hidden=s!==name);document.body.classList.toggle("over",name==="over")};
+
+function start(){
+  state="count";lastXY=null;
+  countEnd=performance.now()+3000;
+  $("hint").textContent="Hands off in...";
+  $("stars").innerHTML="★★★★★";
+  document.activeElement&&document.activeElement.blur();
+  show("play");
+  raf=requestAnimationFrame(tick);
+}
+
+function tick(now){
+  if(state==="count"){
+    const left=countEnd-now;
+    if(left<=0){state="run";startedAt=now;lastXY=null;$("hint").textContent="Don't touch anything"}
+    else $("clock").textContent=Math.ceil(left/1000);
+  }
+  if(state==="run"){
+    const e=(now-startedAt)/1000;
+    const n=MILESTONES.filter(m=>e>=m).length;
+    $("clock").textContent=e.toFixed(2);
+    $("stars").innerHTML="<b>"+"★".repeat(n)+"</b>"+"★".repeat(5-n);
+    $("tag").textContent="∞   "+rankFor(e).toUpperCase();
+  }
+  if(state==="count"||state==="run") raf=requestAnimationFrame(tick);
+}
+
+function lose(reason){
+  if(state!=="run") return;
+  const e=Math.max(0,(performance.now()-startedAt)/1000);
+  state="over";cancelAnimationFrame(raf);
+  const isBest=e>best;
+  if(isBest){best=e;try{localStorage.setItem("eat5star_best",String(best))}catch(_){}}
+  $("rank").textContent=rankFor(e)||"Fidgety";
+  $("reason").textContent=reason;
+  $("lasted").textContent="You lasted  "+e.toFixed(2)+" seconds"+(isBest&&e>.5?"  —  NEW PERSONAL BEST":"");
+  showBest();show("over");
+}
+
+$("eat").onclick=start;
+$("again").onclick=start;
+
+addEventListener("pointermove",ev=>{
+  if(state!=="run") return;
+  const p=[ev.screenX,ev.screenY];
+  if(lastXY&&Math.hypot(p[0]-lastXY[0],p[1]-lastXY[1])>=3) lose("You moved the mouse");
+  lastXY=p;
+},true);
+addEventListener("pointerdown",()=>lose("You clicked"),true);
+addEventListener("keydown",()=>lose("You pressed a key"),true);
+addEventListener("wheel",()=>lose("You scrolled"),{capture:true,passive:true});
+addEventListener("blur",()=>lose("You left the window"));
+document.addEventListener("visibilitychange",()=>{if(document.hidden)lose("You left the window")});
+
+// ---- PWA install ----
+const installBtn=$("install"),installNote=$("installNote");
+let deferredPrompt=null;
+const isStandalone=()=>matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const wasInstalled=()=>{try{return localStorage.getItem("eat5star_installed")==="1"}catch(e){return false}};
+function markInstalled(){try{localStorage.setItem("eat5star_installed","1")}catch(e){}renderInstall()}
+function renderInstall(){
+  installNote.hidden=true;installBtn.disabled=false;
+  if(isStandalone()||wasInstalled()){
+    installBtn.textContent="App already installed";installBtn.disabled=true;return;
+  }
+  installBtn.textContent="Install app";
+}
+installBtn.onclick=async()=>{
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    const r=await deferredPrompt.userChoice;
+    deferredPrompt=null;
+    if(r.outcome==="accepted") markInstalled();
+  }else{
+    const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+    installNote.textContent=ios
+      ?"On iPhone/iPad: tap Share, then Add to Home Screen."
+      :"Use your browser menu and choose Install app or Add to Home Screen.";
+    installNote.hidden=false;
+  }
+};
+addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;try{localStorage.removeItem("eat5star_installed")}catch(_){}renderInstall()});
+addEventListener("appinstalled",()=>{deferredPrompt=null;markInstalled()});
+if(navigator.getInstalledRelatedApps){navigator.getInstalledRelatedApps().then(a=>{if(a.length)markInstalled()}).catch(()=>{})}
+if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+renderInstall();
+</script>
+</body>
+</html>
